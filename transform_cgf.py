@@ -602,15 +602,21 @@ class _TransformCgf:
         return data
 
     def _write_data(self):
-        path = Path(self._input_file)
+        input_path = Path(self._input)
 
-        if self._output_folder is not None:
-            out_dir = Path(self._output_folder)
+        if self._output is None:
+            out_dir = input_path.parent / "transform_output"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_file = out_dir / input_path.name
         else:
-            out_dir = path.parent / "transform_output"
+            output_path = Path(self._output)
 
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_file = out_dir / path.name
+            if output_path.suffix.lower() == ".cgf":
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                out_file = output_path
+            else:
+                output_path.mkdir(parents=True, exist_ok=True)
+                out_file = output_path / input_path.name
 
         with open(out_file, "wb") as f:
             self._data.write(f)
@@ -761,6 +767,180 @@ class _TransformCgf:
             )
 
         for vertex_index, vertex_weight in enumerate(self._vertex_chunk.vertex_weights):
+            # change finger3 and finger4 to finger2
+            for link in vertex_weight.bone_links:
+                bone_name = self._bone_name_chunk.names[link.bone]
+
+                m = re.search(r"Finger([34])$", bone_name)
+                if not m:
+                    continue
+
+                new_bone_name = bone_name.replace(f"Finger{m.group(1)}", "Finger2")
+                link.bone = old_names.index(new_bone_name)
+
+            # merge repeated links
+            merged = {}
+            for link in vertex_weight.bone_links:
+                if link.bone in merged:
+                    merged[link.bone].blending += link.blending
+                else:
+                    new_link = CgfFormat.BoneLink()
+                    new_link.bone = link.bone
+                    new_link.blending = link.blending
+                    merged[link.bone] = new_link
+
+            while vertex_weight.bone_links:
+                vertex_weight.bone_links.pop()
+
+            for link in merged.values():
+                vertex_weight.bone_links.append(link)
+
+            # Normalize dominant hand/finger weights
+            handled = False
+            for finger in range(5):
+                hand_idx = next(
+                    (
+                        i
+                        for i, l in enumerate(vertex_weight.bone_links)
+                        if self._bone_name_chunk.names[l.bone].endswith("Hand")
+                    ),
+                    None,
+                )
+
+                idx0 = next(
+                    (
+                        i
+                        for i, l in enumerate(vertex_weight.bone_links)
+                        if self._bone_name_chunk.names[l.bone].endswith(
+                            f"Finger{finger}"
+                        )
+                    ),
+                    None,
+                )
+
+                idx1 = next(
+                    (
+                        i
+                        for i, l in enumerate(vertex_weight.bone_links)
+                        if self._bone_name_chunk.names[l.bone].endswith(
+                            f"Finger{finger}1"
+                        )
+                    ),
+                    None,
+                )
+
+                idx2 = next(
+                    (
+                        i
+                        for i, l in enumerate(vertex_weight.bone_links)
+                        if self._bone_name_chunk.names[l.bone].endswith(
+                            f"Finger{finger}2"
+                        )
+                    ),
+                    None,
+                )
+
+                # Hand + FingerN
+                if hand_idx is not None and idx0 is not None:
+                    hand = vertex_weight.bone_links[hand_idx]
+                    finger0 = vertex_weight.bone_links[idx0]
+
+                    total = hand.blending + finger0.blending
+
+                    if total > 0.75:
+                        finger_total = sum(
+                            l.blending
+                            for l in vertex_weight.bone_links
+                            if re.search(
+                                r"Finger\d$",
+                                self._bone_name_chunk.names[l.bone],
+                            )
+                        )
+
+                        new_links = []
+
+                        new_hand = CgfFormat.BoneLink()
+                        new_hand.bone = hand.bone
+                        new_hand.blending = 0.5
+                        new_links.append(new_hand)
+
+                        for l in vertex_weight.bone_links:
+                            if not re.search(
+                                r"Finger\d$",
+                                self._bone_name_chunk.names[l.bone],
+                            ):
+                                continue
+
+                            new_link = CgfFormat.BoneLink()
+                            new_link.bone = l.bone
+                            new_link.blending = (
+                                l.blending / finger_total * 0.5
+                                if finger_total > 0
+                                else 0
+                            )
+                            new_links.append(new_link)
+
+                        while vertex_weight.bone_links:
+                            vertex_weight.bone_links.pop()
+
+                        for link in new_links:
+                            vertex_weight.bone_links.append(link)
+                        handled = True
+                        break
+
+                # FingerN + FingerN1
+                if idx0 is not None and idx1 is not None:
+                    blend = (
+                        vertex_weight.bone_links[idx0].blending
+                        + vertex_weight.bone_links[idx1].blending
+                    )
+
+                    if blend > 0.75:
+                        bone2 = old_names.index(
+                            self._bone_name_chunk.names[
+                                vertex_weight.bone_links[idx1].bone
+                            ].replace(f"Finger{finger}1", f"Finger{finger}2")
+                        )
+
+                        link0 = CgfFormat.BoneLink()
+                        link0.bone = vertex_weight.bone_links[idx0].bone
+                        link0.blending = 0.5
+
+                        link2 = CgfFormat.BoneLink()
+                        link2.bone = bone2
+                        link2.blending = 0.5
+
+                        while vertex_weight.bone_links:
+                            vertex_weight.bone_links.pop()
+
+                        vertex_weight.bone_links.append(link0)
+                        vertex_weight.bone_links.append(link2)
+                        handled = True
+                        break
+
+                # FingerN1 + FingerN2
+                if idx1 is not None and idx2 is not None:
+                    blend = (
+                        vertex_weight.bone_links[idx1].blending
+                        + vertex_weight.bone_links[idx2].blending
+                    )
+
+                    if blend > 0.75:
+                        link2 = CgfFormat.BoneLink()
+                        link2.bone = vertex_weight.bone_links[idx2].bone
+                        link2.blending = 1.0
+
+                        while vertex_weight.bone_links:
+                            vertex_weight.bone_links.pop()
+
+                        vertex_weight.bone_links.append(link2)
+                        handled = True
+                        break
+
+                if handled:
+                    continue
+
+            # remove all left Finger1 links
             while any(
                 re.compile(r"Finger(\d)1").search(
                     self._bone_name_chunk.names[link.bone]
@@ -859,17 +1039,17 @@ class _TransformCgf:
 
     def _validate_data(self):
         if self._bone_name_chunk.num_names == self._template_bone_name_chunk.num_names:
-            raise RuntimeError(f"{self._input_file} is already in old format.")
+            raise RuntimeError(f"{self._input} is already in old format.")
         if self._bone_name_chunk.num_names < 100:
-            raise RuntimeError(f"{self._input_file} is not a PC model.")
+            raise RuntimeError(f"{self._input} is not a PC model.")
 
     def _determine_race_gender(self):
-        filename = Path(self._input_file).stem.lower()
+        filename = Path(self._input).stem.lower()
         return filename[:2], filename[1] == "m"
 
-    def __init__(self, input_file: str, output_folder: str | None = None):
-        self._input_file = input_file
-        self._output_folder = output_folder
+    def __init__(self, input: str, output: str | None = None):
+        self._input = input
+        self._output = output
 
         race, self._is_male = self._determine_race_gender()
 
@@ -882,7 +1062,7 @@ class _TransformCgf:
             self._template_vertex_chunk,
         ) = self._find_chunks(template_data)
 
-        self._data = self._read_data(input_file)
+        self._data = self._read_data(input)
 
         (
             self._bone_name_chunk,
@@ -906,20 +1086,24 @@ class _TransformCgf:
         self._write_data()
 
 
-def transform_cgf(input_file: str, output_folder: str | None = None):
+def transform_cgf(input: str, output: str | None = None):
     """
-    Transforms PC Aion models from patch 5.x and later to formats used by earlier patches.
+    Transforms PC Aion models from patch 5.x and later to a format used by earlier patches.
 
     Args:
-    * input_file:
+    * input:
     Path to the original .cgf file from patch 5.x or later that will be transformed.
 
-    * output_folder:
-        Path to the directory where the transformed file will be written.
-        If not specified, a directory named `transform_output` will be created in the same directory as the original file.
+    * output:
+        Path to either the output directory or the output `.cgf` file.
+        If a directory is specified, the transformed file will be written there
+        using the original filename. If a `.cgf` file is specified, it will be
+        used as the exact output path.
+        If not specified, a directory named `transform_output` will be created
+        in the same directory as the original file.
     """
 
-    _TransformCgf(input_file, output_folder)
+    _TransformCgf(input, output)
 
 
 __all__ = ["transform_cgf"]
