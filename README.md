@@ -14,4 +14,4 @@ transform_cgf(INPUT_FILE)
 transform_cgf(INPUT_FILE, OUTPUT_FOLDER)
 ```
 
-**NOTE!** Input file should have standard Aion naming, e.g. it should start with `LF`, `DF`, `LM` or `LF` (lower or capital).
+**NOTE!** Input file should have standard Аiоn naming, e.g. it should start with `LF`, `DF`, `LM` or `LF` (lower or capital).
