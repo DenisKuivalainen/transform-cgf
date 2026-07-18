@@ -2,6 +2,7 @@ from pyffi.formats.cgf import CgfFormat
 import re
 from pathlib import Path
 from math import acos, cos, sin, radians
+from reskin.reskin_vertex import Reskin, VertexBone
 
 
 class _TransformCgf:
@@ -1047,6 +1048,31 @@ class _TransformCgf:
         filename = Path(self._input).stem.lower()
         return filename[:2], filename[1] == "m"
 
+    def _reskin_mesh(self):
+        reskin = Reskin()
+        for i, vertex in enumerate(self._vertex_chunk.vertices):
+
+            [x, y, z] = reskin.transform_vertex(
+                [vertex.p.x, vertex.p.y, vertex.p.z],
+                [
+                    VertexBone(self._bone_name_chunk.names[link.bone], link.blending)
+                    for link in self._vertex_chunk.vertex_weights[i].bone_links
+                ],
+            )
+
+            vertex.p.x = x
+            vertex.p.y = y
+            vertex.p.z = z
+
+            for link in self._vertex_chunk.vertex_weights[i].bone_links:
+                link.offset = (
+                    vertex.p
+                    - self._bone_initial_chunk.initial_pos_matrices[link.bone].pos
+                    - self._bone_offset
+                ) * self._bone_initial_chunk.initial_pos_matrices[
+                    link.bone
+                ].rot.get_transpose()
+
     def __init__(self, input: str, output: str | None = None):
         self._input = input
         self._output = output
@@ -1082,6 +1108,8 @@ class _TransformCgf:
         self._reposition_fingers()
 
         self._transform_cgf()
+
+        self._reskin_mesh()
 
         self._write_data()
 

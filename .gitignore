@@ -8,5 +8,8 @@
 !templatelf.cgf
 !templatelm.cgf
 
-run_transform_cgf.py
-transform_cgf.py
+!run_transform_cgf.py
+!transform_cgf.py
+
+!reskin/
+!reskin/**
