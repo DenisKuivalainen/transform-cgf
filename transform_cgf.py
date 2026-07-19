@@ -1049,7 +1049,12 @@ class _TransformCgf:
         return filename[:2], filename[1] == "m"
 
     def _reskin_mesh(self):
-        reskin = Reskin("hand" in Path(self._input).name.lower())
+        file_name = Path(self._input).name.lower()
+
+        if file_name[0] != "d":
+            return
+
+        reskin = Reskin("hand" in file_name)
         for i, vertex in enumerate(self._vertex_chunk.vertices):
 
             [x, y, z] = reskin.transform_vertex(
