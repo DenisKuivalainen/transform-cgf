@@ -1049,7 +1049,7 @@ class _TransformCgf:
         return filename[:2], filename[1] == "m"
 
     def _reskin_mesh(self):
-        reskin = Reskin()
+        reskin = Reskin("hand" in Path(self._input).name.lower())
         for i, vertex in enumerate(self._vertex_chunk.vertices):
 
             [x, y, z] = reskin.transform_vertex(
@@ -1080,7 +1080,7 @@ class _TransformCgf:
         race, self._is_male = self._determine_race_gender()
 
         # read template data for old sceleton
-        template_data = self._read_data(f"./template{race}.cgf")
+        template_data = self._read_data(f"./templates/template{race}.cgf")
         (
             self._template_bone_name_chunk,
             self._template_bone_anim_chunk,

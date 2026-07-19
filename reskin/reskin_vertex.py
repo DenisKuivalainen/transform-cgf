@@ -29,8 +29,9 @@ class VertexBone:
 
 class Reskin:
 
-    def __init__(self):
+    def __init__(self, is_hand):
         self._profiles: Dict[str, BoneProfile]
+        self._is_hand = is_hand
 
         profile_path = Path(__file__).resolve().parent / "bone_profiles.json"
 
@@ -54,6 +55,27 @@ class Reskin:
             )
             for bone_name, profile in raw.items()
         }
+
+    _bones_power = {
+        "Bip01 L Forearm": 1.3,
+        "Bip01 R Forearm": 1.3,
+        # "Bip01 L UpperArm": 1.15,
+        # "Bip01 R UpperArm": 1.15,
+        # "L_ShCustom": 1.15,
+        # "R_ShCustom": 1.15,
+        # "Bip01 L Clavicle": 1.15,
+        # "Bip01 R Clavicle": 1.15,
+        # "Bip01 Spine": 1.15,
+        # "Bip01 Spine1": 1.15,
+        # "Bip01 Pelvis": 1.15,
+        # "Bip01 L Thigh": 1.15,
+        # "Bip01 R Thigh": 1.15,
+        # "Bip01 L Calf": 1.15,
+        # "Bip01 R Calf": 1.15,
+        # "Bip01 Neck": 1.15,
+        # "Bip01 R Foot": 1.15,
+        # "Bip01 R Toe0": 1.15,
+    }
 
     def transform_vertex(
         self,
@@ -84,10 +106,10 @@ class Reskin:
         if total_weight == 0:
             return vertex_pos.copy()
 
-        if total_weight > 0:
-            total_offset /= total_weight
+        # if total_weight > 0:
+        #     total_offset /= total_weight
 
-        return (vertex + total_offset * 1.15).tolist()
+        return (vertex + total_offset).tolist()
 
     def _calculate_bone_offset(
         self,
@@ -151,7 +173,11 @@ class Reskin:
         for w, delta in zip(weights, deltas):
             delta_local += delta * (w / weight_sum)
 
-        return rot @ delta_local
+        return (rot @ delta_local) * (
+            self._bones_power[profile.bone_name]
+            if profile.bone_name in self._bones_power and self._is_hand
+            else 1
+        )
 
 
 __all__ = ["Reskin", "VertexBone"]

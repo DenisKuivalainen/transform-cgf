@@ -13,3 +13,5 @@
 
 !reskin/
 !reskin/**
+
+*.py[cod]

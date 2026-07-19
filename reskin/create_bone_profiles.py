@@ -25,6 +25,8 @@ allowed_bones = [
     "Bip01 Neck",
     "Bip01 R Foot",
     "Bip01 R Toe0",
+    "Bip01 L Foot",
+    "Bip01 L Toe0",
 ]
 
 
@@ -214,8 +216,8 @@ def get_matched_vertices(gender):
                     bone_name,
                     link.blending,
                     new_bones_weights[bone_name],
-                    old_bone_initial_chunk.initial_pos_matrices[link.bone].pos,
-                    old_bone_initial_chunk.initial_pos_matrices[link.bone].rot,
+                    new_bone_initial_chunk.initial_pos_matrices[link.bone].pos,
+                    new_bone_initial_chunk.initial_pos_matrices[link.bone].rot,
                     old_vertex_p,
                     new_vertex_p,
                     is_anchor,
