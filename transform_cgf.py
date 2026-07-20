@@ -1071,7 +1071,7 @@ class _TransformCgf:
                     link.bone
                 ].rot.get_transpose()
 
-    _EPSILON = 1e-5
+    _EPSILON = 1e-2
 
     def _is_hand_anchor(self, vertex, hand_anchors) -> bool:
 
@@ -1107,9 +1107,13 @@ class _TransformCgf:
         ]
 
         for i, vertex in enumerate(self._vertex_chunk.vertices):
-            if close_to_anchors:
+            v = {}
 
-                vertex.p += vertex.n
+            if close_to_anchors:
+                v["old"] = vertex.p
+                v["new"] = vertex.p
+                processed_vertices.append(v)
+                continue
 
             _v = next(
                 (
@@ -1123,7 +1127,6 @@ class _TransformCgf:
             if _v is not None:
                 vertex.p = _v["new"]
             else:
-                v = {}
                 v["old"] = vertex.p
 
                 weight = sum(
@@ -1134,15 +1137,30 @@ class _TransformCgf:
                     )
                     for link in self._vertex_chunk.vertex_weights[i].bone_links
                 )
-
-                if not close_to_anchors:
-                    vertex.p += vertex.n * weight
-                else:
-                    vertex.p += (
-                        vertex.n
-                        * weight
-                        * max(0.0, min(1.0, (vertex.p.z - 110.0) / (120.0 - 110.0)))
-                    )
+                if vertex.p.z < 130:
+                    if not close_to_anchors:
+                        m = 15
+                        k = 1 / m
+                        vertex.p += (
+                            vertex.n
+                            * weight
+                            * (
+                                m
+                                - min(
+                                    self._reskin.get_distance_to_closest_control_point(
+                                        vertex.p, hand_bones_names, self._is_dark
+                                    ),
+                                    m,
+                                )
+                            )
+                            * k
+                        )
+                    else:
+                        vertex.p += (
+                            vertex.n
+                            * weight
+                            * max(0.0, min(1.0, (vertex.p.z - 110.0) / (120.0 - 110.0)))
+                        )
 
                 v["new"] = vertex.p
                 processed_vertices.append(v)
@@ -1188,12 +1206,19 @@ class _TransformCgf:
         # Since it does not affect texture due - it is ok.
         self._calculate_bone_offset()
 
+        # In 5.x+ there are 5 fingers, not 3 as before.
+        # Since we downgrade model, we need to reposition fingers to look properly with animations.
         self._reposition_fingers()
 
+        # Basic sceleton transformation from new model to old one.
         self._transform_cgf()
 
+        # In 5.x+ asmo end elyos have same model, but on older versions not.
+        # The idea is to sransform skin to fit old asmo model
         self._reskin_mesh()
 
+        # In 5.x+ characters have less buffed hands than on older versions.
+        # The idea is to scale gloves to fit old model (skin and gloves surfaces should not overlap).
         self._transform_hands()
 
         self._calculate_vertex_link_offset()

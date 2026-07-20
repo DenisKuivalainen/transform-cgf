@@ -54,26 +54,28 @@ class Reskin:
             for bone_name, profile in raw.items()
         }
 
-    _bones_power = {
-        "Bip01 L Forearm": 1.3,
-        "Bip01 R Forearm": 1.3,
-        "Bip01 L UpperArm": 1.15,
-        "Bip01 R UpperArm": 1.15,
-        # "L_ShCustom": 1.15,
-        # "R_ShCustom": 1.15,
-        # "Bip01 L Clavicle": 1.15,
-        # "Bip01 R Clavicle": 1.15,
-        # "Bip01 Spine": 1.15,
-        # "Bip01 Spine1": 1.15,
-        # "Bip01 Pelvis": 1.15,
-        # "Bip01 L Thigh": 1.15,
-        # "Bip01 R Thigh": 1.15,
-        # "Bip01 L Calf": 1.15,
-        # "Bip01 R Calf": 1.15,
-        # "Bip01 Neck": 1.15,
-        # "Bip01 R Foot": 1.15,
-        # "Bip01 R Toe0": 1.15,
-    }
+    def get_distance_to_closest_control_point(self, vertex_pos, bone_names, is_dark):
+        min_dist = float("inf")
+
+        vertex = np.array([vertex_pos.x, vertex_pos.y, vertex_pos.z], dtype=float)
+
+        for bone_name in bone_names:
+            profile = self._profiles.get(bone_name)
+            if profile is None:
+                continue
+
+            for cp in profile.control_points:
+                control_pos = np.array(
+                    cp.old_pos if is_dark else cp.new_pos,
+                    dtype=float,
+                )
+
+                dist = np.linalg.norm(vertex - control_pos)
+
+                if dist < min_dist:
+                    min_dist = dist
+
+        return min_dist
 
     def get_anchors(self, bone_name) -> list[ControlPoint]:
         profile = self._profiles.get(bone_name)
@@ -157,29 +159,24 @@ class Reskin:
                 break
 
         # ---------------- Anchor ----------------
-        anchor_radius_big = 2
-        anchor_radius_small = 0.1
+        anchor_radius = 2
 
         if anchor is None:
             anchor_k = 0.0
             anchor_local_offset = np.zeros(3)
         else:
-
             anchor_dist, anchor_cp, anchor_new_local = anchor
-            anchor_dist = min(anchor_dist, anchor_radius_big)
-            anchor_old_local = rot.T @ (np.asarray(anchor_cp.old_pos) - bone_pos)
-
-            if anchor_dist <= anchor_radius_small:
-                anchor_local_offset = anchor_old_local - anchor_new_local
-                anchor_k = 1.0
-            else:
-
-                anchor_predicted_local = anchor_old_local + (
-                    vertex_local - anchor_new_local
+            if anchor_dist < 1e-4:
+                anchor_local_offset = rot.T @ (
+                    np.asarray(anchor_cp.old_pos) - np.asarray(anchor_cp.new_pos)
                 )
+                anchor_k = 1
+            else:
+                anchor_dist = min(anchor_dist, anchor_radius)
+                anchor_old_local = rot.T @ (np.asarray(anchor_cp.old_pos) - bone_pos)
 
-                anchor_local_offset = anchor_predicted_local - vertex_local
-                anchor_k = (anchor_radius_big - anchor_dist) ** 1.5 / anchor_radius_big
+                anchor_local_offset = anchor_old_local - anchor_new_local
+                anchor_k = (anchor_radius - anchor_dist) ** 1.5 / anchor_radius
 
         # ---------------- Neighbours ----------------
 
@@ -218,9 +215,6 @@ class Reskin:
             predicted_local += w * p
 
         offset_local = predicted_local - vertex_local
-        # * (
-        #     self._bones_power.get(profile.bone_name, 1.0) if self._is_hand else 1.0
-        # )
         offset_k = 1 - anchor_k
 
         return rot @ (anchor_local_offset * anchor_k + offset_local * offset_k)
