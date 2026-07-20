@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from math import acos, cos, sin, radians
 from reskin.reskin_vertex import Reskin, VertexBone
+from typing import Literal
 
 
 class _TransformCgf:
@@ -587,8 +588,8 @@ class _TransformCgf:
             self._bone_initial_chunk.initial_pos_matrices[key].pos = new_pos[key]
             self._bone_initial_chunk.initial_pos_matrices[key].rot = new_rot[key]
 
-    def _read_data(self, file_name):
-        with open(file_name, "rb") as caf:
+    def _read_data(self, file_name, input_folder):
+        with open(input_folder + file_name, "rb") as caf:
             data = CgfFormat.Data()
             try:
                 data.inspect_version_only(caf)
@@ -1040,16 +1041,17 @@ class _TransformCgf:
 
     def _validate_data(self):
         if self._bone_name_chunk.num_names == self._template_bone_name_chunk.num_names:
-            raise RuntimeError(f"{self._input} is already in old format.")
+            raise ValueError(f"{self._input} is already in old format.")
         if self._bone_name_chunk.num_names < 100:
-            raise RuntimeError(f"{self._input} is not a PC model.")
+            raise ValueError(f"{self._input} is not a PC model.")
 
     def _determine_race_gender(self):
         filename = Path(self._input).stem.lower()
         return filename[:2], filename[1] == "m"
 
     def _reskin_mesh(self):
-        file_name = Path(self._input).name.lower()
+        # file_name = Path(self._input).name.lower()
+        file_name = self._model.lower()
 
         if file_name[0] != "d":
             return
@@ -1078,14 +1080,22 @@ class _TransformCgf:
                     link.bone
                 ].rot.get_transpose()
 
-    def __init__(self, input: str, output: str | None = None):
+    def __init__(
+        self,
+        input: str,
+        output: str | None = None,
+        input_folder: str | None = "",
+        model: str | None = "lm",
+    ):
         self._input = input
         self._output = output
+        self._input_folder = input_folder
+        self._model = model
 
         race, self._is_male = self._determine_race_gender()
 
         # read template data for old sceleton
-        template_data = self._read_data(f"./templates/template{race}.cgf")
+        template_data = self._read_data(f"template{model}.cgf", "./")
         (
             self._template_bone_name_chunk,
             self._template_bone_anim_chunk,
@@ -1093,7 +1103,7 @@ class _TransformCgf:
             self._template_vertex_chunk,
         ) = self._find_chunks(template_data)
 
-        self._data = self._read_data(input)
+        self._data = self._read_data(input, input_folder)
 
         (
             self._bone_name_chunk,
@@ -1119,13 +1129,18 @@ class _TransformCgf:
         self._write_data()
 
 
-def transform_cgf(input: str, output: str | None = None):
+def transform_cgf(
+    input: str,
+    output: str | None = None,
+    input_folder: str | None = "",
+    model: Literal["lf", "df", "lm", "dm"] | None = "lm",
+):
     """
     Transforms PC Aion models from patch 5.x and later to a format used by earlier patches.
 
     Args:
     * input:
-    Path to the original .cgf file from patch 5.x or later that will be transformed.
+        Original .cgf file name from patch 5.x or later that will be transformed.
 
     * output:
         Path to either the output directory or the output `.cgf` file.
@@ -1134,9 +1149,19 @@ def transform_cgf(input: str, output: str | None = None):
         used as the exact output path.
         If not specified, a directory named `transform_output` will be created
         in the same directory as the original file.
+
+    * input_folder:
+        Path to directory with original file
+
+    * model:
+        lm, dm, lf, df
     """
 
-    _TransformCgf(input, output)
+    try:
+        _TransformCgf(input, output, input_folder, model)
+    except ValueError as e:
+        print(f"{e}")
+    # _TransformCgf(input, output)
 
 
 __all__ = ["transform_cgf"]
