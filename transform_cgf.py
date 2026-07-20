@@ -998,12 +998,6 @@ class _TransformCgf:
                     )
                 link.bone = new_bone
 
-                link.offset = (
-                    self._vertex_chunk.vertices[vertex_index].p
-                    - new_matrices[new_bone].pos
-                    - self._bone_offset
-                ) * new_matrices[new_bone].rot.get_transpose()
-
             new_links = {}
             for link in vertex_weight.bone_links:
                 if link.bone in new_links:
@@ -1047,19 +1041,18 @@ class _TransformCgf:
 
     def _determine_race_gender(self):
         filename = Path(self._input).stem.lower()
-        return filename[:2], filename[1] == "m"
+        return filename[:2], filename[1] == "m", filename[0] == "d"
 
     def _reskin_mesh(self):
-        # file_name = Path(self._input).name.lower()
-        file_name = self._model.lower()
+        file_name = Path(self._input).name.lower()
+        self._reskin = Reskin("hand" in file_name)
 
-        if file_name[0] != "d":
+        if not self._is_dark:
             return
 
-        reskin = Reskin("hand" in file_name)
         for i, vertex in enumerate(self._vertex_chunk.vertices):
 
-            [x, y, z] = reskin.transform_vertex(
+            [x, y, z] = self._reskin.transform_vertex(
                 [vertex.p.x, vertex.p.y, vertex.p.z],
                 [
                     VertexBone(self._bone_name_chunk.names[link.bone], link.blending)
@@ -1071,6 +1064,8 @@ class _TransformCgf:
             vertex.p.y = y
             vertex.p.z = z
 
+    def _calculate_vertex_link_offset(self):
+        for i, vertex in enumerate(self._vertex_chunk.vertices):
             for link in self._vertex_chunk.vertex_weights[i].bone_links:
                 link.offset = (
                     vertex.p
@@ -1079,6 +1074,82 @@ class _TransformCgf:
                 ) * self._bone_initial_chunk.initial_pos_matrices[
                     link.bone
                 ].rot.get_transpose()
+
+    _EPSILON = 1e-5
+
+    def _is_hand_anchor(self, vertex, hand_anchors) -> bool:
+
+        return any(
+            abs(vertex.p.x - x) <= self._EPSILON
+            and abs(vertex.p.y - y) <= self._EPSILON
+            and abs(vertex.p.z - z) <= self._EPSILON
+            for x, y, z in hand_anchors
+        )
+
+    def _transform_hands(self):
+        file_name = Path(self._input).name.lower()
+        if "hand" not in file_name:
+            return
+
+        hand_anchors = [
+            cp.old_pos if self._is_dark else cp.new_pos
+            for cp in [
+                *self._reskin.get_anchors("Bip01 L Forearm"),
+                *self._reskin.get_anchors("Bip01 R Forearm"),
+            ]
+        ]
+        processed_vertices = []
+        close_to_anchors = any(
+            self._is_hand_anchor(v, hand_anchors) for v in self._vertex_chunk.vertices
+        )
+
+        hand_bones_names = [
+            "Bip01 L Forearm",
+            "Bip01 R Forearm",
+            "Bip01 L UpperArm",
+            "Bip01 R UpperArm",
+        ]
+
+        for i, vertex in enumerate(self._vertex_chunk.vertices):
+            if close_to_anchors:
+
+                vertex.p += vertex.n
+
+            _v = next(
+                (
+                    p
+                    for p in processed_vertices
+                    if (vertex.p - p["old"]).norm() <= self._EPSILON
+                ),
+                None,
+            )
+
+            if _v is not None:
+                vertex.p = _v["new"]
+            else:
+                v = {}
+                v["old"] = vertex.p
+
+                weight = sum(
+                    (
+                        link.blending
+                        if self._bone_name_chunk.names[link.bone] in hand_bones_names
+                        else 0
+                    )
+                    for link in self._vertex_chunk.vertex_weights[i].bone_links
+                )
+
+                if not close_to_anchors:
+                    vertex.p += vertex.n * weight
+                else:
+                    vertex.p += (
+                        vertex.n
+                        * weight
+                        * max(0.0, min(1.0, (vertex.p.z - 110.0) / (120.0 - 110.0)))
+                    )
+
+                v["new"] = vertex.p
+                processed_vertices.append(v)
 
     def __init__(
         self,
@@ -1092,7 +1163,7 @@ class _TransformCgf:
         self._input_folder = input_folder
         self._model = model
 
-        race, self._is_male = self._determine_race_gender()
+        race, self._is_male, self._is_dark = self._determine_race_gender()
 
         # read template data for old sceleton
         template_data = self._read_data(f"template{model}.cgf", "./")
@@ -1126,7 +1197,11 @@ class _TransformCgf:
 
         self._reskin_mesh()
 
+        self._transform_hands()
+
         self._write_data()
+
+        self._calculate_vertex_link_offset()
 
 
 def transform_cgf(

@@ -1,7 +1,7 @@
 from transform_cgf import transform_cgf
 
-INPUT = "LFCL_Cash_casualrider1111_body.cgf"
-OUTPUT = "D:\EA dev\Objects\pc\lf\mesh"
+INPUT = "DMCH_cash_S8EV_Hand.cgf"
+OUTPUT = "D:\EA dev\Objects\pc\dm\mesh"
 
 
 def main():
