@@ -115,8 +115,6 @@ def read_points_json(gender):
 @dataclass
 class VertexesTransformation:
     bone_name: str
-    bone_old_weight: float
-    bone_new_weight: float
     bone_pos: list[float]
     bone_rot: list[list[float]]
 
@@ -127,8 +125,6 @@ class VertexesTransformation:
     def __init__(
         self,
         bone_name,
-        bone_old_weight,
-        bone_new_weight,
         bone_pos,
         bone_rot,
         vertex_old_pos,
@@ -136,8 +132,6 @@ class VertexesTransformation:
         is_anchor,
     ):
         self.bone_name = bone_name
-        self.bone_old_weight = bone_old_weight
-        self.bone_new_weight = bone_new_weight
         self.bone_pos = vector_to_array(bone_pos)
         self.bone_rot = matrix_to_array(bone_rot)
         self.vertex_old_pos = vector_to_array(vertex_old_pos)
@@ -214,8 +208,6 @@ def get_matched_vertices(gender):
 
                 t = VertexesTransformation(
                     bone_name,
-                    link.blending,
-                    new_bones_weights[bone_name],
                     new_bone_initial_chunk.initial_pos_matrices[link.bone].pos,
                     new_bone_initial_chunk.initial_pos_matrices[link.bone].rot,
                     old_vertex_p,
@@ -234,9 +226,8 @@ def get_matched_vertices(gender):
 
 @dataclass
 class ControlPoint:
-    local_pos: tuple[float, float, float]
-    delta_local: tuple[float, float, float]
-    weight: float
+    old_pos: tuple[float, float, float]
+    new_pos: tuple[float, float, float]
     is_anchor: bool
 
 
@@ -279,17 +270,9 @@ def build_profiles(gender):
         control_points = []
 
         for s in samples:
-
-            old_local = world_to_local(s.vertex_old_pos, bone_pos, bone_rot)
-
-            new_local = world_to_local(s.vertex_new_pos, bone_pos, bone_rot)
-
-            delta_local = old_local - new_local
-
             cp = ControlPoint(
-                local_pos=tuple(new_local),
-                delta_local=tuple(delta_local),
-                weight=(s.bone_old_weight + s.bone_new_weight) * 0.5,
+                old_pos=s.vertex_old_pos,
+                new_pos=s.vertex_new_pos,
                 is_anchor=s.is_anchor,
             )
 

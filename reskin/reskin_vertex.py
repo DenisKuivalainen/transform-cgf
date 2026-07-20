@@ -7,9 +7,8 @@ from pathlib import Path
 
 @dataclass
 class ControlPoint:
-    local_pos: tuple[float, float, float]
-    delta_local: tuple[float, float, float]
-    weight: float
+    old_pos: tuple[float, float, float]
+    new_pos: tuple[float, float, float]
     is_anchor: bool
 
 
@@ -45,9 +44,8 @@ class Reskin:
                 bone_rot=profile["bone_rot"],
                 control_points=[
                     ControlPoint(
-                        local_pos=tuple(cp["local_pos"]),
-                        delta_local=tuple(cp["delta_local"]),
-                        weight=cp["weight"],
+                        old_pos=tuple(cp["old_pos"]),
+                        new_pos=tuple(cp["new_pos"]),
                         is_anchor=cp["is_anchor"],
                     )
                     for cp in profile["control_points"]
@@ -59,8 +57,8 @@ class Reskin:
     _bones_power = {
         "Bip01 L Forearm": 1.3,
         "Bip01 R Forearm": 1.3,
-        # "Bip01 L UpperArm": 1.15,
-        # "Bip01 R UpperArm": 1.15,
+        "Bip01 L UpperArm": 1.15,
+        "Bip01 R UpperArm": 1.15,
         # "L_ShCustom": 1.15,
         # "R_ShCustom": 1.15,
         # "Bip01 L Clavicle": 1.15,
@@ -86,28 +84,32 @@ class Reskin:
         vertex = np.asarray(vertex_pos, dtype=float)
 
         total_offset = np.zeros(3, dtype=float)
-        total_weight = 0.0
+
+        all_points = []
+        bones_to_use = []
 
         for bone in bones:
-
             profile = self._profiles.get(bone.bone_name)
-            if profile is None:
+            if profile is None or bone.weight <= 0.0:
                 continue
 
-            weight = bone.weight
-            if weight <= 0.0:
-                continue
+            bones_to_use.append(bone)
+            all_points.extend(profile.control_points)
 
-            offset = self._calculate_bone_offset(vertex, profile)
-
-            total_offset += offset * weight
-            total_weight += weight
-
-        if total_weight == 0:
+        if not bones_to_use or not all_points:
             return vertex_pos.copy()
 
-        # if total_weight > 0:
-        #     total_offset /= total_weight
+        for bone in bones_to_use:
+
+            profile = self._profiles[bone.bone_name]
+
+            offset = self._calculate_bone_offset(
+                vertex,
+                profile,
+                all_points,
+            )
+
+            total_offset += offset * bone.weight
 
         return (vertex + total_offset).tolist()
 
@@ -115,69 +117,98 @@ class Reskin:
         self,
         vertex_world: np.ndarray,
         profile: BoneProfile,
-        nearest_count: int = 5,
-        anchor_radius: float = 1.0,
+        all_points: list[ControlPoint],
+        nearest_count: int = 4,
+        anchor_radius: float = 2,
     ) -> np.ndarray:
 
         rot = np.asarray(profile.bone_rot, dtype=float)
         bone_pos = np.asarray(profile.bone_pos, dtype=float)
 
-        # vertex -> bone local
+        # vertex in bone-local space
         vertex_local = rot.T @ (vertex_world - bone_pos)
 
-        distances = []
+        candidates = []
 
-        for cp in profile.control_points:
+        for cp in all_points:
 
-            cp_pos = np.asarray(cp.local_pos, dtype=float)
+            new_local = rot.T @ (np.asarray(cp.new_pos) - bone_pos)
 
-            dist = np.linalg.norm(vertex_local - cp_pos)
+            dist = np.linalg.norm(vertex_local - new_local)
 
-            distances.append((dist, cp))
+            candidates.append((dist, cp, new_local))
 
-        distances.sort(key=lambda x: x[0])
+        if not candidates:
+            return np.zeros(3)
 
-        if not distances:
-            return np.zeros(3, dtype=float)
+        candidates.sort(key=lambda x: x[0])
 
-        # Anchor override
-        nearest_dist, nearest_cp = distances[0]
+        anchor = None
+        for i, (_, cp, _) in enumerate(candidates):
+            if cp.is_anchor:
+                anchor = candidates.pop(i)
+                break
 
-        if nearest_cp.is_anchor and nearest_dist <= anchor_radius:
-            delta_local = np.asarray(nearest_cp.delta_local, dtype=float)
-            return rot @ delta_local
+        # ---------------- Anchor ----------------
+        if anchor is None:
+            anchor_k = 0.0
+            anchor_local_offset = np.zeros(3)
+        else:
 
-        # Interpolate nearest N
-        neighbours = distances[:nearest_count]
+            anchor_dist, anchor_cp, anchor_new_local = anchor
+            anchor_dist = min(anchor_dist, anchor_radius)
 
-        weights = []
-        deltas = []
+            anchor_old_local = rot.T @ (np.asarray(anchor_cp.old_pos) - bone_pos)
 
+            anchor_predicted_local = anchor_old_local + (
+                vertex_local - anchor_new_local
+            )
+
+            anchor_local_offset = anchor_predicted_local - vertex_local
+            anchor_k = (anchor_radius - anchor_dist) ** 1.5 / anchor_radius
+
+        # ---------------- Neighbours ----------------
+
+        neighbours = candidates[:nearest_count]
+
+        sigma = 2.0
         eps = 1e-6
 
-        for dist, cp in neighbours:
+        predictions = []
+        weights = []
 
-            # TODO: mb change later
-            w = cp.weight / (dist * dist + eps)
+        for dist, cp, new_local in neighbours:
 
+            old_local = rot.T @ (np.asarray(cp.old_pos) - bone_pos)
+
+            # Vertex keeps the same offset relative to this control point.
+            prediction = old_local + (vertex_local - new_local)
+
+            predictions.append(prediction)
+
+            w = np.exp(-0.5 * (dist / sigma) ** 2)
             weights.append(w)
-            deltas.append(np.asarray(cp.delta_local, dtype=float))
 
-        weight_sum = sum(weights)
+        weights = np.asarray(weights)
 
-        if weight_sum == 0:
-            return np.zeros(3, dtype=float)
+        weight_sum = weights.sum()
 
-        delta_local = np.zeros(3, dtype=float)
+        if weight_sum < eps:
+            weights = np.ones(len(weights)) / len(weights)
+        else:
+            weights /= weight_sum
 
-        for w, delta in zip(weights, deltas):
-            delta_local += delta * (w / weight_sum)
+        predicted_local = np.zeros(3)
 
-        return (rot @ delta_local) * (
-            self._bones_power[profile.bone_name]
-            if profile.bone_name in self._bones_power and self._is_hand
-            else 1
+        for w, p in zip(weights, predictions):
+            predicted_local += w * p
+
+        offset_local = (predicted_local - vertex_local) * (
+            self._bones_power.get(profile.bone_name, 1.0) if self._is_hand else 1.0
         )
+        offset_k = 1 - anchor_k
+
+        return rot @ (anchor_local_offset * anchor_k + offset_local * offset_k)
 
 
 __all__ = ["Reskin", "VertexBone"]
