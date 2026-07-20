@@ -75,6 +75,14 @@ class Reskin:
         # "Bip01 R Toe0": 1.15,
     }
 
+    def get_anchors(self, bone_name) -> list[ControlPoint]:
+        profile = self._profiles.get(bone_name)
+
+        if profile is None:
+            return []
+
+        return [cp for cp in profile.control_points if cp.is_anchor]
+
     def transform_vertex(
         self,
         vertex_pos: list[float],
@@ -119,7 +127,6 @@ class Reskin:
         profile: BoneProfile,
         all_points: list[ControlPoint],
         nearest_count: int = 4,
-        anchor_radius: float = 2,
     ) -> np.ndarray:
 
         rot = np.asarray(profile.bone_rot, dtype=float)
@@ -150,22 +157,29 @@ class Reskin:
                 break
 
         # ---------------- Anchor ----------------
+        anchor_radius_big = 2
+        anchor_radius_small = 0.1
+
         if anchor is None:
             anchor_k = 0.0
             anchor_local_offset = np.zeros(3)
         else:
 
             anchor_dist, anchor_cp, anchor_new_local = anchor
-            anchor_dist = min(anchor_dist, anchor_radius)
-
+            anchor_dist = min(anchor_dist, anchor_radius_big)
             anchor_old_local = rot.T @ (np.asarray(anchor_cp.old_pos) - bone_pos)
 
-            anchor_predicted_local = anchor_old_local + (
-                vertex_local - anchor_new_local
-            )
+            if anchor_dist <= anchor_radius_small:
+                anchor_local_offset = anchor_old_local - anchor_new_local
+                anchor_k = 1.0
+            else:
 
-            anchor_local_offset = anchor_predicted_local - vertex_local
-            anchor_k = (anchor_radius - anchor_dist) ** 1.5 / anchor_radius
+                anchor_predicted_local = anchor_old_local + (
+                    vertex_local - anchor_new_local
+                )
+
+                anchor_local_offset = anchor_predicted_local - vertex_local
+                anchor_k = (anchor_radius_big - anchor_dist) ** 1.5 / anchor_radius_big
 
         # ---------------- Neighbours ----------------
 
@@ -203,9 +217,10 @@ class Reskin:
         for w, p in zip(weights, predictions):
             predicted_local += w * p
 
-        offset_local = (predicted_local - vertex_local) * (
-            self._bones_power.get(profile.bone_name, 1.0) if self._is_hand else 1.0
-        )
+        offset_local = predicted_local - vertex_local
+        # * (
+        #     self._bones_power.get(profile.bone_name, 1.0) if self._is_hand else 1.0
+        # )
         offset_k = 1 - anchor_k
 
         return rot @ (anchor_local_offset * anchor_k + offset_local * offset_k)
