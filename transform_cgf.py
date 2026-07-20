@@ -1039,10 +1039,6 @@ class _TransformCgf:
         if self._bone_name_chunk.num_names < 100:
             raise ValueError(f"{self._input} is not a PC model.")
 
-    def _determine_race_gender(self):
-        filename = Path(self._input).stem.lower()
-        return filename[:2], filename[1] == "m", filename[0] == "d"
-
     def _reskin_mesh(self):
         file_name = Path(self._input).name.lower()
         self._reskin = Reskin("hand" in file_name)
@@ -1163,10 +1159,11 @@ class _TransformCgf:
         self._input_folder = input_folder
         self._model = model
 
-        race, self._is_male, self._is_dark = self._determine_race_gender()
+        self._is_male = model[1]
+        self._is_dark = model[0]
 
         # read template data for old sceleton
-        template_data = self._read_data(f"template{model}.cgf", "./")
+        template_data = self._read_data(f"templates/template{model}.cgf", "./")
         (
             self._template_bone_name_chunk,
             self._template_bone_anim_chunk,
