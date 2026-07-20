@@ -1196,9 +1196,9 @@ class _TransformCgf:
 
         self._transform_hands()
 
-        self._write_data()
-
         self._calculate_vertex_link_offset()
+
+        self._write_data()
 
 
 def transform_cgf(
@@ -1233,7 +1233,6 @@ def transform_cgf(
         _TransformCgf(input, output, input_folder, model)
     except ValueError as e:
         print(f"{e}")
-    # _TransformCgf(input, output)
 
 
 __all__ = ["transform_cgf"]
