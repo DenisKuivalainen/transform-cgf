@@ -28,11 +28,14 @@ class VertexBone:
 
 class Reskin:
 
-    def __init__(self, is_hand):
+    def __init__(self, is_hand, is_male):
         self._profiles: Dict[str, BoneProfile]
         self._is_hand = is_hand
 
-        profile_path = Path(__file__).resolve().parent / "bone_profiles.json"
+        profile_path = (
+            Path(__file__).resolve().parent
+            / f"{"m" if is_male else "f"}_bone_profiles.json"
+        )
 
         with profile_path.open("r", encoding="utf-8") as f:
             raw = json.load(f)

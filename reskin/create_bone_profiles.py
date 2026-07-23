@@ -30,7 +30,7 @@ allowed_bones = [
 ]
 
 
-def find_vertices(vertices, pos, epsilon=1e-2, retry=True):
+def find_vertices(vertices, pos, epsilon=1e-2):
     position = [round(v, 4) for v in pos]
     matches_x = []
     matches_y = []
@@ -55,16 +55,14 @@ def find_vertices(vertices, pos, epsilon=1e-2, retry=True):
         for mx in matches_x:
             if mx in matches_y or mx in matches_z:
                 matches.append(mx)
+        for my in matches_y:
+            if my in matches_z and my not in matches:
+                matches.append(my)
 
     if len(matches) != 1:
-        if retry:
-            return find_vertices(vertices, pos, 1e-4, False)
+        return None, matches
 
-        raise Exception(
-            f"{len(matches)} for point [{position[0]}, {position[1]}, {position[2]}]"
-        )
-
-    return matches[0]
+    return matches[0], matches
 
 
 def getChunks(file):
@@ -180,11 +178,38 @@ def get_matched_vertices(gender):
         for b_p, old_pos, new_pos, is_anchor, _ in points:
             if b_p != body_part:
                 continue
-            old_vertex_index = find_vertices(old_vertex_chunk.vertices, old_pos)
-            new_vertex_index = find_vertices(new_vertex_chunk.vertices, new_pos)
+            old_vertex_index, _o_m = (
+                find_vertices(old_vertex_chunk.vertices, old_pos, 0.1)
+                or find_vertices(old_vertex_chunk.vertices, old_pos, 0.01)
+                or find_vertices(old_vertex_chunk.vertices, old_pos, 0.001)
+                or find_vertices(old_vertex_chunk.vertices, old_pos, 0.0001)
+            )
+            new_vertex_index, _n_m = (
+                find_vertices(new_vertex_chunk.vertices, new_pos, 0.1)
+                or find_vertices(new_vertex_chunk.vertices, new_pos, 0.01)
+                or find_vertices(new_vertex_chunk.vertices, new_pos, 0.001)
+                or find_vertices(new_vertex_chunk.vertices, new_pos, 0.0001)
+            )
 
-            if old_vertex_index is None or new_vertex_index is None:
+            if old_vertex_index is None and new_vertex_index is None:
                 continue
+            elif (
+                gender == "f" and old_vertex_index is None and new_vertex_index in _o_m
+            ):
+                old_vertex_index = new_vertex_index
+            elif (
+                gender == "f" and new_vertex_index is None and old_vertex_index in _n_m
+            ):
+                new_vertex_index = old_vertex_index
+            elif old_vertex_index is None:
+                print(_o_m, _n_m)
+                raise Exception(
+                    f"No matches for old point [{old_pos[0]}, {old_pos[1]}, {old_pos[2]}]"
+                )
+            elif new_vertex_index is None:
+                raise Exception(
+                    f"No matches for old point [{new_pos[0]}, {new_pos[1]}, {new_pos[2]}]"
+                )
 
             old_vertex_p = old_vertex_chunk.vertices[old_vertex_index].p
             new_vertex_p = new_vertex_chunk.vertices[new_vertex_index].p
@@ -285,10 +310,10 @@ def build_profiles(gender):
             control_points=control_points,
         )
 
-    with open("bone_profiles.json", "w") as f:
+    with open(f"{gender}_bone_profiles.json", "w") as f:
         json.dump({k: asdict(v) for k, v in profiles.items()}, f, indent=4)
 
 
 if __name__ == "__main__":
-    for gender in ["m"]:  # TODO: add "f"
+    for gender in ["m", "f"]:
         build_profiles(gender)

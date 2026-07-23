@@ -1041,7 +1041,7 @@ class _TransformCgf:
 
     def _reskin_mesh(self):
         file_name = Path(self._input).name.lower()
-        self._reskin = Reskin("hand" in file_name)
+        self._reskin = Reskin("hand" in file_name, self._is_male)
 
         if not self._is_dark:
             return
@@ -1082,7 +1082,10 @@ class _TransformCgf:
             for x, y, z in hand_anchors
         )
 
-    def _transform_hands(self):
+    def _transform_gloves(self):
+        if not self._is_male:
+            return
+
         file_name = Path(self._input).name.lower()
         if "hand" not in file_name:
             return
@@ -1219,7 +1222,7 @@ class _TransformCgf:
 
         # In 5.x+ characters have less buffed hands than on older versions.
         # The idea is to scale gloves to fit old model (skin and gloves surfaces should not overlap).
-        self._transform_hands()
+        self._transform_gloves()
 
         self._calculate_vertex_link_offset()
 
