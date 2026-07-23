@@ -1180,8 +1180,8 @@ class _TransformCgf:
         self._input_folder = input_folder
         self._model = model
 
-        self._is_male = model[1]
-        self._is_dark = model[0]
+        self._is_male = model[1] == "m"
+        self._is_dark = model[0] == "d"
 
         # read template data for old sceleton
         template_data = self._read_data(f"templates/template{model}.cgf", "./")

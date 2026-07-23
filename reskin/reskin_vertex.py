@@ -32,8 +32,10 @@ class Reskin:
         self._profiles: Dict[str, BoneProfile]
         self._is_hand = is_hand
 
-        profile_path = Path(__file__).resolve().parent / f"{is_male}_bone_profiles.json"
-        print(profile_path)
+        profile_path = (
+            Path(__file__).resolve().parent
+            / f"{'m' if is_male else 'f'}_bone_profiles.json"
+        )
 
         with profile_path.open("r", encoding="utf-8") as f:
             raw = json.load(f)
