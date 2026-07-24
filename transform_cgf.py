@@ -256,6 +256,13 @@ class _TransformCgf:
         new_pos = {}
         new_rot = {}
 
+        # f21_pos = old_pos[
+        #     [next(k for k, v in names.items() if v == "Bip01 R Finger21")]
+        # ]
+        # f22_pos = old_pos[
+        #     [next(k for k, v in names.items() if v == "Bip01 R Finger22")]
+        # ]
+
         for _f0, _f1, _f2, _d in [
             [
                 "Bip01 R Finger0",
@@ -326,23 +333,24 @@ class _TransformCgf:
             delta_rot_f0_f1 = old_rot[f0].get_transpose() * old_rot[f1]
             delta_rot_f1_f2 = old_rot[f1].get_transpose() * old_rot[f2]
 
-            new_pos[f0] = old_pos[f0].get_copy()
-            new_rot[f0] = d.get_copy()
+            f20_pos = old_pos[next(k for k, v in names.items() if v == f"{_f1[:-1]}2")]
 
-            angle = 20
-            length_modifier = 1.25
+            new_pos[f0] = f20_pos + ((old_pos[f0].get_copy() - f20_pos) * 0.75)
+            new_rot[f0] = d.get_copy() * self._get_finger_rotation(" R " in _d, 5)
+
+            angle = 30
+            length_modifier = 1
             if "Finger0" in _f0:
                 angle = 0
-                length_modifier = 1.15
-            elif "Finger4" in _f0:
-                length_modifier = 1.15
-            elif "Finger1" in _f0:
-                length_modifier = 1.35
-                angle = 15
+                length_modifier = 0.9
 
             additional_rot = self._get_finger_rotation(" R " in _d, angle)
 
-            new_rot[f1] = new_rot[f0] * delta_rot_f0_f1 * additional_rot
+            new_rot[f1] = (
+                new_rot[f0] * additional_rot
+                if "Finger2" in _d
+                else new_rot[f0] * delta_rot_f0_f1 * additional_rot
+            )
             new_pos[f1] = (
                 new_pos[f0]
                 + (
@@ -353,7 +361,11 @@ class _TransformCgf:
                 * new_rot[f0]
             )
 
-            new_rot[f2] = new_rot[f1] * delta_rot_f1_f2 * additional_rot
+            new_rot[f2] = (
+                new_rot[f1] * additional_rot
+                if "Finger2" in _d
+                else new_rot[f1] * delta_rot_f1_f2 * additional_rot
+            )
             new_pos[f2] = (
                 new_pos[f1]
                 + (
