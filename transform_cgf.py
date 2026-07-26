@@ -343,6 +343,8 @@ class _TransformCgf:
             if "Finger0" in _f0:
                 angle = 0
                 length_modifier = 0.9
+            elif "Finger1" in _f0:
+                angle = 18
 
             additional_rot = self._get_finger_rotation(" R " in _d, angle)
 
