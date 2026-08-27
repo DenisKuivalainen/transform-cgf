@@ -672,16 +672,16 @@ class _TransformCgf:
                 bone_rot = self._bone_initial_chunk.initial_pos_matrices[
                     self._vertex_chunk.vertex_weights[n].bone_links[m].bone
                 ].rot
-            bone_pos = self._bone_initial_chunk.initial_pos_matrices[
-                self._vertex_chunk.vertex_weights[n].bone_links[m].bone
-            ].pos
-            offset = self._vertex_chunk.vertex_weights[n].bone_links[m].offset
-            vertex_pos = self._vertex_chunk.vertices[n].p
+                bone_pos = self._bone_initial_chunk.initial_pos_matrices[
+                    self._vertex_chunk.vertex_weights[n].bone_links[m].bone
+                ].pos
+                offset = self._vertex_chunk.vertex_weights[n].bone_links[m].offset
+                vertex_pos = self._vertex_chunk.vertices[n].p
 
-            if self._vertex_chunk.vertex_weights[n].bone_links[m].blending == 0:
-                continue
+                if self._vertex_chunk.vertex_weights[n].bone_links[m].blending == 0:
+                    continue
 
-            offsets.append(vertex_pos - (bone_pos + offset * bone_rot))
+                offsets.append(vertex_pos - (bone_pos + offset * bone_rot))
 
         avg = CgfFormat.Vector3()
         for v in offsets:
