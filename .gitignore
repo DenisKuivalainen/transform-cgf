@@ -1,17 +1,16 @@
-*
-
-!LICENSE
-!README.md
-
-!templatedf.cgf
-!templatedm.cgf
-!templatelf.cgf
-!templatelm.cgf
-
-!run_transform_cgf.py
-!transform_cgf.py
-
-!reskin/
-!reskin/**
-
+__pycache__/
 *.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Old-rig templates are game assets and must not be committed.
+/templates/
+
+# Conversion output
+transform_output/

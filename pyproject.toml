@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transform-cgf"
+version = "1.0.0"
+description = "Convert Aion character meshes from the patch-5.x skeleton back to the layout older clients expect"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "Denis Kuivalainen" }]
+keywords = ["aion", "cryengine", "cgf", "mesh", "skeleton", "retarget"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+# PyFFI is not installable from PyPI for Python 3.10+; see README.
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/DenisKuivalainen/transform-cgf"
+Issues = "https://github.com/DenisKuivalainen/transform-cgf/issues"
+
+[project.scripts]
+transform-cgf = "transform_cgf.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"transform_cgf" = ["py.typed"]
+"transform_cgf.reskin" = ["data/*.json"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: runs a full conversion; deselect with -m 'not slow'",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pyffi.*",
+]
