@@ -204,7 +204,9 @@ def _pose_female(rig: _Rig, template: SkeletonChunks) -> FingerPose:
         reference_rot = rig.rotation[rig.index(chain.reference)]
         tip_pos = rig.position[tip]
 
-        root_pos = tip_pos + ((rig.position[root].get_copy() - tip_pos) * _FEMALE_ROOT_PULL)
+        root_pos = tip_pos + (
+            (rig.position[root].get_copy() - tip_pos) * _FEMALE_ROOT_PULL
+        )
         root_rot = reference_rot.get_copy() * _swing(chain, _FEMALE_ROOT_SWING)
         pose.set(root, root_pos, root_rot)
 
@@ -299,11 +301,15 @@ def _skin_displacements(
             if bone not in rig:
                 continue
 
-            local = (position - rig.position[bone]) * rig.rotation[
-                bone
-            ].get_transpose()
-            moved = local * pose.rotation[bone] + pose.position[bone]
-            delta += (moved - position) * link.blending
+            # local = (position - rig.position[bone]) * rig.rotation[bone].get_transpose()
+            # moved = local * pose.rotation[bone] + pose.position[bone]
+            # delta += (moved - position) * link.blending
+            delta += (
+                link.offset * pose.rotation[bone]
+                + pose.position[bone]
+                - link.offset * rig.rotation[bone]
+                - rig.position[bone]
+            ) * link.blending
 
         displacements[vertex_index] = delta
 

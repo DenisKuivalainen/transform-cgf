@@ -9,8 +9,5 @@ htmlcov/
 .venv/
 venv/
 
-# Old-rig templates are game assets and must not be committed.
-/templates/
-
 # Conversion output
 transform_output/
