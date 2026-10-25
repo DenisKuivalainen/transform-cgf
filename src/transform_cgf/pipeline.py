@@ -90,8 +90,8 @@ class TransformPipeline:
 
         self._retarget(chunks, template)
 
-        reskinned = self._reskin(chunks)
-        gloves_inflated = self._inflate_gloves(chunks)
+        reskinned = self._reskin(chunks, bone_offset)
+        gloves_inflated = self._inflate_gloves(chunks, bone_offset)
 
         # Offsets are rebuilt last: every stage above moves either vertices
         # or bones, and the offset is the relationship between the two.
@@ -144,7 +144,9 @@ class TransformPipeline:
             self._deformer = ReskinDeformer(load_profiles(self.model.profile_name))
         return self._deformer
 
-    def _reskin(self, chunks: SkeletonChunks) -> bool:
+    def _reskin(
+        self, chunks: SkeletonChunks, bone_offset: CgfFormat.Vector3
+    ) -> bool:
         """Move the shared body onto the old race-specific one.
 
         Only dark models need this; light models already match the body the
@@ -153,28 +155,41 @@ class TransformPipeline:
         if not self.model.is_dark:
             return False
 
+        # The reskin profiles live in the reference body's frame, which sits
+        # ``bone_offset`` away from the mesh's own.
         names = chunks.names
         for index, vertex in enumerate(chunks.vertices):
             x, y, z = self.deformer.transform_vertex(
-                [vertex.p.x, vertex.p.y, vertex.p.z],
+                [
+                    vertex.p.x - bone_offset.x,
+                    vertex.p.y - bone_offset.y,
+                    vertex.p.z - bone_offset.z,
+                ],
                 [
                     VertexBone(names[link.bone], link.blending)
                     for link in chunks.vertex_weights[index].bone_links
                 ],
             )
-            vertex.p.x = x
-            vertex.p.y = y
-            vertex.p.z = z
+            vertex.p.x = x + bone_offset.x
+            vertex.p.y = y + bone_offset.y
+            vertex.p.z = z + bone_offset.z
 
         return True
 
-    def _inflate_gloves(self, chunks: SkeletonChunks) -> bool:
+    def _inflate_gloves(
+        self, chunks: SkeletonChunks, bone_offset: CgfFormat.Vector3
+    ) -> bool:
         if not self.model.is_male:
             return False
         if _HAND_MESH_MARKER not in self.input_path.name.lower():
             return False
 
-        return inflate_gloves(chunks, self.deformer, is_dark=self.model.is_dark)
+        return inflate_gloves(
+            chunks,
+            self.deformer,
+            is_dark=self.model.is_dark,
+            bone_offset=bone_offset,
+        )
 
 
 def transform_file(

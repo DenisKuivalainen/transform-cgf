@@ -231,12 +231,8 @@ def dissolve_middle_phalanges(links, names: Sequence[str]) -> None:
             while position < len(links) and links[position].bone == link.bone:
                 links.pop(position)
 
-            root = names.index(
-                bone_name.replace(f"Finger{finger}1", f"Finger{finger}")
-            )
-            tip = names.index(
-                bone_name.replace(f"Finger{finger}1", f"Finger{finger}2")
-            )
+            root = names.index(bone_name.replace(f"Finger{finger}1", f"Finger{finger}"))
+            tip = names.index(bone_name.replace(f"Finger{finger}1", f"Finger{finger}2"))
 
             for bone in (root, tip):
                 links.append(_make_link(bone, link.blending * 0.5))
