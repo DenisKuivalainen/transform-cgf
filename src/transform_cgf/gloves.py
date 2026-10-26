@@ -82,29 +82,17 @@ def inflate_gloves(
     deformer: ReskinDeformer,
     *,
     is_dark: bool,
-    bone_offset: CgfFormat.Vector3 | None = None,
 ) -> bool:
     """Push glove vertices outwards along their normals.
-
-    ``bone_offset`` is the mesh-wide constant from
-    :func:`skinning.average_bone_offset`.  It shifts the height cut-off, and
-    is subtracted from each vertex before measuring its distance to the arm,
-    so both are taken in the same frame as the reference body.
 
     Returns whether anything moved, so a caller (or a test) can tell an
     inflated glove from a skipped skin mesh.
     """
-    ox, oy, oz = (
-        (bone_offset.x, bone_offset.y, bone_offset.z)
-        if bone_offset is not None
-        else (0.0, 0.0, 0.0)
-    )
-    max_height = MAX_INFLATION_HEIGHT + oz
     anchors = _skin_anchor_positions(deformer, is_dark)
 
     # A single shared vertex is enough: reference-body geometry means skin.
-    if any(_is_at(vertex.p, anchors) for vertex in chunks.vertices):
-        return False
+    # if any(_is_at(vertex.p, anchors) for vertex in chunks.vertices):
+    #     return False
 
     names = chunks.names
     moved: list[_Moved] = []
@@ -121,13 +109,13 @@ def inflate_gloves(
 
         before = vertex.p
 
-        if vertex.p.z < max_height:
+        if vertex.p.z < MAX_INFLATION_HEIGHT:
             arm_weight = sum(
                 link.blending if names[link.bone] in ARM_BONES else 0
                 for link in chunks.vertex_weights[index].bone_links
             )
             distance = deformer.distance_to_closest_control_point(
-                (vertex.p.x - ox, vertex.p.y - oy, vertex.p.z - oz),
+                (vertex.p.x, vertex.p.y, vertex.p.z),
                 ARM_BONES,
                 is_dark,
             )

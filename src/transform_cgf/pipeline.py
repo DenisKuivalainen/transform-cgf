@@ -80,9 +80,9 @@ class TransformPipeline:
         source_bone_count = chunks.bone_count
         vertex_count = len(chunks.vertices)
 
-        # The per-link offsets encode a constant that has to be recovered
-        # from the input's own skeleton, before that skeleton is rebuilt.
-        bone_offset = skinning.average_bone_offset(chunks)
+        # Bring the stored positions in line with what the input's own
+        # skeleton says, before anything moves either of them.
+        skinning.recompute_vertex_positions(chunks)
 
         # Fingers move while all ten chains still exist; afterwards there is
         # no ring finger left to read a pose from.
@@ -90,12 +90,12 @@ class TransformPipeline:
 
         self._retarget(chunks, template)
 
-        reskinned = self._reskin(chunks, bone_offset)
-        gloves_inflated = self._inflate_gloves(chunks, bone_offset)
+        reskinned = self._reskin(chunks)
+        gloves_inflated = self._inflate_gloves(chunks)
 
         # Offsets are rebuilt last: every stage above moves either vertices
         # or bones, and the offset is the relationship between the two.
-        skinning.rebuild_link_offsets(chunks, bone_offset)
+        skinning.rebuild_link_offsets(chunks)
 
         cgf_io.write_cgf(data, self.output_path)
 
@@ -144,9 +144,7 @@ class TransformPipeline:
             self._deformer = ReskinDeformer(load_profiles(self.model.profile_name))
         return self._deformer
 
-    def _reskin(
-        self, chunks: SkeletonChunks, bone_offset: CgfFormat.Vector3
-    ) -> bool:
+    def _reskin(self, chunks: SkeletonChunks) -> bool:
         """Move the shared body onto the old race-specific one.
 
         Only dark models need this; light models already match the body the
@@ -155,30 +153,22 @@ class TransformPipeline:
         if not self.model.is_dark:
             return False
 
-        # The reskin profiles live in the reference body's frame, which sits
-        # ``bone_offset`` away from the mesh's own.
         names = chunks.names
         for index, vertex in enumerate(chunks.vertices):
             x, y, z = self.deformer.transform_vertex(
-                [
-                    vertex.p.x - bone_offset.x,
-                    vertex.p.y - bone_offset.y,
-                    vertex.p.z - bone_offset.z,
-                ],
+                [vertex.p.x, vertex.p.y, vertex.p.z],
                 [
                     VertexBone(names[link.bone], link.blending)
                     for link in chunks.vertex_weights[index].bone_links
                 ],
             )
-            vertex.p.x = x + bone_offset.x
-            vertex.p.y = y + bone_offset.y
-            vertex.p.z = z + bone_offset.z
+            vertex.p.x = x
+            vertex.p.y = y
+            vertex.p.z = z
 
         return True
 
-    def _inflate_gloves(
-        self, chunks: SkeletonChunks, bone_offset: CgfFormat.Vector3
-    ) -> bool:
+    def _inflate_gloves(self, chunks: SkeletonChunks) -> bool:
         if not self.model.is_male:
             return False
         if _HAND_MESH_MARKER not in self.input_path.name.lower():
@@ -188,7 +178,6 @@ class TransformPipeline:
             chunks,
             self.deformer,
             is_dark=self.model.is_dark,
-            bone_offset=bone_offset,
         )
 
 

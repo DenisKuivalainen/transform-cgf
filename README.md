@@ -95,7 +95,7 @@ flowchart TD
     TPL["templates/template{lf,df,lm,dm}.cgf<br/>(old-rig reference, not in repo)"] --> READ
     READ["cgf_io.read_cgf + chunks.find_chunks<br/>BoneNameList, BoneAnim,<br/>BoneInitialPos, Mesh, SourceInfo"] --> VAL
     VAL["chunks.validate_convertible<br/>reject if bone count == template's<br/>or &lt; 100"] --> OFF
-    OFF["skinning.average_bone_offset<br/>mean residual of<br/>vertex − (bone_pos + offset·bone_rot)"] --> FING
+    OFF["skinning.recompute_vertex_positions<br/>vertex = Σ w·(bone_pos + offset·bone_rot)"] --> FING
     FING["fingers.reposition_fingers<br/>male/female finger retarget<br/>+ weighted vertex displacement"] --> XF
     XF["retarget.build_bone_table<br/>+ rebase_old_rig_fingers<br/>+ skinning.rewrite_vertex_weights<br/>+ commit"] --> RS
     RS["pipeline._reskin<br/>(dark models only)<br/>reskin.deform.ReskinDeformer"] --> GL

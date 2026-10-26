@@ -32,7 +32,6 @@ from pyffi.formats.cgf import CgfFormat
 
 from .chunks import SkeletonChunks
 from .errors import UnmappedBoneError
-from .math3d import mean
 
 __all__ = [
     "collapse_extra_fingers",
@@ -43,7 +42,7 @@ __all__ = [
     "remap_bones",
     "renormalise",
     "rewrite_vertex_weights",
-    "average_bone_offset",
+    "recompute_vertex_positions",
     "rebuild_link_offsets",
     "DOMINANCE_THRESHOLD",
 ]
@@ -326,35 +325,43 @@ def rewrite_vertex_weights(
 # -- bone offsets ---------------------------------------------------------
 
 
-def average_bone_offset(chunks: SkeletonChunks) -> CgfFormat.Vector3:
-    """The mesh-wide constant hidden in every ``BoneLink.offset``.
+def recompute_vertex_positions(chunks: SkeletonChunks) -> None:
+    """Replace each stored vertex position with the one its links describe.
 
-    A link's offset is the vertex's position in its bone's frame, plus a
-    per-file constant whose derivation is not known.  Recovering it as the
-    mean residual over every weighted link is accurate to well under a
-    texel, and it has to be recovered before the offsets can be rebuilt on
-    the new skeleton.
+    The stored position and the position the skeleton implies
+    (``bone.pos + link.offset * bone.rot``, blended over the links) differ
+    by an amount that varies per file, and per link in some files.  The
+    engine skins from the links, so they are the ground truth: once the
+    stored positions agree with them, every later stage works in a single
+    frame and the offsets rebuild exactly.
+
+    Vertices without a weighted link are left where they are.
     """
-    residuals = []
-
     for index, vertex in enumerate(chunks.vertices):
-        for link in chunks.vertex_weights[index].bone_links:
-            if link.blending == 0:
-                continue
+        links = [
+            link
+            for link in chunks.vertex_weights[index].bone_links
+            if link.blending != 0
+        ]
+        total = sum(link.blending for link in links)
+        if total == 0:
+            continue
 
+        position = CgfFormat.Vector3()
+        for link in links:
             matrix = chunks.matrices[link.bone]
-            residuals.append(vertex.p - (matrix.pos + link.offset * matrix.rot))
+            position += (matrix.pos + link.offset * matrix.rot) * (
+                link.blending / total
+            )
 
-    return mean(residuals)
+        vertex.p.x = position.x
+        vertex.p.y = position.y
+        vertex.p.z = position.z
 
 
-def rebuild_link_offsets(
-    chunks: SkeletonChunks, bone_offset: CgfFormat.Vector3
-) -> None:
+def rebuild_link_offsets(chunks: SkeletonChunks) -> None:
     """Recompute every link offset against the rebuilt skeleton."""
     for index, vertex in enumerate(chunks.vertices):
         for link in chunks.vertex_weights[index].bone_links:
             matrix = chunks.matrices[link.bone]
-            link.offset = (
-                vertex.p - matrix.pos - bone_offset
-            ) * matrix.rot.get_transpose()
+            link.offset = (vertex.p - matrix.pos) * matrix.rot.get_transpose()
