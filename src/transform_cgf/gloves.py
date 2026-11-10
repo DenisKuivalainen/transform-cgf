@@ -16,18 +16,15 @@ doing damage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Iterable
 
 from pyffi.formats.cgf import CgfFormat
 
 from .chunks import SkeletonChunks
+from .inflation import EPSILON, inflate_near_bones
 from .reskin.deform import ReskinDeformer
 
 __all__ = ["inflate_gloves", "ARM_BONES", "EPSILON", "MAX_INFLATION_DISTANCE"]
-
-#: Two positions within this distance are treated as the same point.
-EPSILON = 1e-2
 
 #: Bones whose weight marks a vertex as part of the arm.
 ARM_BONES = (
@@ -45,19 +42,6 @@ MAX_INFLATION_DISTANCE = 15.0
 
 #: Vertices at or above this height are head/torso and are left alone.
 MAX_INFLATION_HEIGHT = 130.0
-
-#: Reciprocal of the falloff distance, kept as its own factor so the
-#: multiplication order matches the arithmetic the shipped assets were
-#: generated with.
-_INFLATION_SCALE = 1.0 / MAX_INFLATION_DISTANCE
-
-
-@dataclass
-class _Moved:
-    """One vertex position before and after inflation."""
-
-    before: CgfFormat.Vector3
-    after: CgfFormat.Vector3
 
 
 def _is_at(position: CgfFormat.Vector3, anchors: Iterable[tuple]) -> bool:
@@ -94,41 +78,11 @@ def inflate_gloves(
     # if any(_is_at(vertex.p, anchors) for vertex in chunks.vertices):
     #     return False
 
-    names = chunks.names
-    moved: list[_Moved] = []
-    changed = False
-
-    for index, vertex in enumerate(chunks.vertices):
-        already = next(
-            (m for m in moved if (vertex.p - m.before).norm() <= EPSILON),
-            None,
-        )
-        if already is not None:
-            vertex.p = already.after
-            continue
-
-        before = vertex.p
-
-        if vertex.p.z < MAX_INFLATION_HEIGHT:
-            arm_weight = sum(
-                link.blending if names[link.bone] in ARM_BONES else 0
-                for link in chunks.vertex_weights[index].bone_links
-            )
-            distance = deformer.distance_to_closest_control_point(
-                (vertex.p.x, vertex.p.y, vertex.p.z),
-                ARM_BONES,
-                is_dark,
-            )
-            # Full push at the surface, tapering linearly to nothing at
-            # MAX_INFLATION_DISTANCE away from it.
-            vertex.p += (
-                vertex.n
-                * arm_weight
-                * (MAX_INFLATION_DISTANCE - min(distance, MAX_INFLATION_DISTANCE))
-                * _INFLATION_SCALE
-            )
-            changed = changed or arm_weight != 0
-
-        moved.append(_Moved(before=before, after=vertex.p))
-
-    return changed
+    return inflate_near_bones(
+        chunks,
+        deformer,
+        ARM_BONES,
+        is_dark=is_dark,
+        max_distance=MAX_INFLATION_DISTANCE,
+        max_height=MAX_INFLATION_HEIGHT,
+    )

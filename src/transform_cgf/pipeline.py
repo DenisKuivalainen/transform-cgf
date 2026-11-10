@@ -16,6 +16,7 @@ from typing import Optional, Union
 from pyffi.formats.cgf import CgfFormat
 
 from . import cgf_io, retarget, skinning
+from .boots import inflate_boots
 from .bone_maps import VERTEX_BONE_FALLBACK_MAP
 from .chunks import SkeletonChunks, find_chunks, validate_convertible
 from .fingers import reposition_fingers
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 #: Meshes whose name contains this are hand/glove meshes.
 _HAND_MESH_MARKER = "hand"
 
+#: Meshes whose name contains this are foot/boot meshes.
+_FOOT_MESH_MARKER = "foot"
+
 
 @dataclass(frozen=True)
 class TransformResult:
@@ -44,6 +48,7 @@ class TransformResult:
     vertex_count: int
     reskinned: bool
     gloves_inflated: bool
+    boots_inflated: bool = False
 
 
 class TransformPipeline:
@@ -92,6 +97,7 @@ class TransformPipeline:
 
         reskinned = self._reskin(chunks)
         gloves_inflated = self._inflate_gloves(chunks)
+        boots_inflated = self._inflate_boots(chunks)
 
         # Offsets are rebuilt last: every stage above moves either vertices
         # or bones, and the offset is the relationship between the two.
@@ -108,6 +114,7 @@ class TransformPipeline:
             vertex_count=vertex_count,
             reskinned=reskinned,
             gloves_inflated=gloves_inflated,
+            boots_inflated=boots_inflated,
         )
 
     # -- internals ------------------------------------------------------
@@ -175,6 +182,18 @@ class TransformPipeline:
             return False
 
         return inflate_gloves(
+            chunks,
+            self.deformer,
+            is_dark=self.model.is_dark,
+        )
+
+    def _inflate_boots(self, chunks: SkeletonChunks) -> bool:
+        if not self.model.is_male:
+            return False
+        if _FOOT_MESH_MARKER not in self.input_path.name.lower():
+            return False
+
+        return inflate_boots(
             chunks,
             self.deformer,
             is_dark=self.model.is_dark,
